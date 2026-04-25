@@ -27,7 +27,7 @@ pip install pandas flask requests (tkinter) if not installed yet
 
 ## Getting Started
 
-1. Clone or download the repository.
+1. Clone or download the "Lost-and-Found-Item-Tracker" into visual studio code.
 2. Open a terminal in the project folder.
 3. Run the application:
 
