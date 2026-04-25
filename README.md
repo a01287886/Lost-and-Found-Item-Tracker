@@ -146,5 +146,7 @@ Furthermore, this project has strong potential for future development. It could 
 
 
 `- The date field auto-fetches from the [World Time API](http://worldtimeapi.org) (America/New_York timezone). If the API is unavailable, the system date is used instead.`
+
 `- The matching algorithm is basic substring matching. An item is considered a possible match if one description contains the other.`
+
 `- Deleting an item resets the internal row indices, so IDs shown in the UI may change after a deletion.`
