@@ -139,6 +139,12 @@ curl http://localhost:5000/matches
 
 ## Notes
 
+The initial impact of this project is positive, as it provides a simple yet functional solution to a common problem in schools: lost personal items. Even though it is a basic system, it improves the organization of lost and found processes and reduces the time students spend trying to recover their belongings.
+
+Furthermore, this project has strong potential for future development. It could be expanded into a more advanced application with a graphical user interface, automatic notifications, or integration with an online database. In its current form, it demonstrates how a simple technological tool can create a meaningful and practical impact in everyday student life.
+
+
+
 - The date field auto-fetches from the [World Time API](http://worldtimeapi.org) (America/New_York timezone). If the API is unavailable, the system date is used instead.
 - The matching algorithm is basic substring matching. An item is considered a possible match if one description contains the other.
 - Deleting an item resets the internal row indices, so IDs shown in the UI may change after a deletion.
