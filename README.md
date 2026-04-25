@@ -44,6 +44,9 @@ This will:
 
 ## Using the Application
 
+## Video Demo: 
+https://youtu.be/zmypEVo1YsI?si=n2Otp7QVnlemypt7
+
 When launched, the main window presents the following buttons:
 
 ### Register Lost Item
