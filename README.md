@@ -19,7 +19,8 @@ A Python desktop application for managing lost and found items, built with a Tki
 Install dependencies with:
 
 ```bash
-pip install pandas flask requests
+pip install pandas flask requests (tkinter) if not installed yet
+
 ```
 
 ---
