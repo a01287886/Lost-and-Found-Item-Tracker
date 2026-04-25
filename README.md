@@ -41,11 +41,10 @@ This will:
 - Open the desktop GUI window.
 
 ---
-
-## Using the Application
-
 ## Video Demo: 
 https://youtu.be/zmypEVo1YsI?si=n2Otp7QVnlemypt7
+
+## Using the Application
 
 When launched, the main window presents the following buttons:
 
