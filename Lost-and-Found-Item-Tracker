@@ -1,0 +1,486 @@
+import pandas as pd
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+import tkinter.ttk as ttk
+from flask import Flask, request, jsonify
+from threading import Thread
+import requests
+
+# Flask API setup
+app = Flask(__name__)
+
+@app.route('/lost', methods=['GET'])
+def get_lost():
+    try:
+        df = pd.read_csv(lost_file)
+        return jsonify(df.to_dict(orient='records'))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/lost', methods=['POST'])
+def add_lost():
+    data = request.get_json()
+    if not data or not all(k in data for k in ['description', 'location', 'date', 'matricula']):
+        return jsonify({'error': 'Missing required fields'}), 400
+    try:
+        df = pd.read_csv(lost_file)
+        new_item = pd.DataFrame([data])
+        df = pd.concat([df, new_item], ignore_index=True)
+        df.to_csv(lost_file, index=False)
+        return jsonify({'message': 'Lost item added'}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/found', methods=['GET'])
+def get_found():
+    try:
+        df = pd.read_csv(found_file)
+        return jsonify(df.to_dict(orient='records'))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/found', methods=['POST'])
+def add_found():
+    data = request.get_json()
+    if not data or not all(k in data for k in ['description', 'location', 'date']):
+        return jsonify({'error': 'Missing required fields'}), 400
+    try:
+        df = pd.read_csv(found_file)
+        new_item = pd.DataFrame([data])
+        df = pd.concat([df, new_item], ignore_index=True)
+        df.to_csv(found_file, index=False)
+        return jsonify({'message': 'Found item added'}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/matches', methods=['GET'])
+def get_matches():
+    try:
+        lost = pd.read_csv(lost_file)
+        found = pd.read_csv(found_file)
+        matches = []
+        for l in lost["description"]:
+            for f in found["description"]:
+                if l.lower() in f.lower() or f.lower() in l.lower():
+                    matches.append({"lost": l, "found": f})
+        return jsonify(matches)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/lost/<int:item_id>', methods=['DELETE'])
+def delete_lost_item(item_id):
+    try:
+        df = pd.read_csv(lost_file)
+        if 0 <= item_id < len(df):
+            df = df.drop(item_id).reset_index(drop=True)
+            df.to_csv(lost_file, index=False)
+            return jsonify({'message': f'Lost item {item_id} deleted'}), 200
+        else:
+            return jsonify({'error': 'Item not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/found/<int:item_id>', methods=['DELETE'])
+def delete_found_item(item_id):
+    try:
+        df = pd.read_csv(found_file)
+        if 0 <= item_id < len(df):
+            df = df.drop(item_id).reset_index(drop=True)
+            df.to_csv(found_file, index=False)
+            return jsonify({'message': f'Found item {item_id} deleted'}), 200
+        else:
+            return jsonify({'error': 'Item not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# This function integrates with an external API to get the current date and time
+# Falls back to system date if API is unavailable
+def get_current_datetime():
+    try:
+        # Try World Time API with timeout
+        response = requests.get("http://worldtimeapi.org/api/timezone/America/New_York", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            datetime_str = data['datetime'][:10]  # Extract date part YYYY-MM-DD
+            return datetime_str
+    except requests.exceptions.Timeout:
+        print("API request timed out, using system date")
+    except requests.exceptions.ConnectionError:
+        print("Could not connect to API, using system date")
+    except Exception as e:
+        print(f"Error fetching datetime: {e}")
+    
+    # Fallback to system date
+    from datetime import datetime
+    return datetime.now().strftime("%Y-%m-%d")
+
+# File names where data will be stored
+lost_file = "lost_items.csv"
+found_file = "found_items.csv"
+
+# This function ensures both CSV files exist before the program runs
+# If they don't exist, it creates them with the correct columns
+def initialize_files():
+    try:
+        pd.read_csv(lost_file)
+    except FileNotFoundError:
+        # Create a new file for lost items with required columns
+        pd.DataFrame(columns=["description", "location", "date", "matricula"]).to_csv(lost_file, index=False)
+
+    try:
+        pd.read_csv(found_file)
+    except FileNotFoundError:
+        # Create a new file for found items with required columns
+        pd.DataFrame(columns=["description", "location", "date"]).to_csv(found_file, index=False)
+
+# This function allows the user to register a lost item
+# It collects input and saves it into the lost_items.csv file
+def register_lost():
+    description = simpledialog.askstring("Register Lost Item", "Item description:")
+    if not description:
+        return
+    location = simpledialog.askstring("Register Lost Item", "Where was it lost?:")
+    if not location:
+        return
+    current_date = get_current_datetime()
+    date = simpledialog.askstring("Register Lost Item", "Date:", initialvalue=current_date or "")
+    if not date:
+        return
+    matricula = simpledialog.askstring("Register Lost Item", "Student ID:")
+    if not matricula:
+        return
+
+    # Load existing data
+    df = pd.read_csv(lost_file)
+
+    # Create a new row with user input
+    new_item = pd.DataFrame([[description, location, date, matricula]], columns=df.columns)
+
+    # Append the new row to the existing data
+    df = pd.concat([df, new_item], ignore_index=True)
+
+    # Save updated data back to CSV
+    df.to_csv(lost_file, index=False)
+
+    messagebox.showinfo("Success", "Lost item registered!")
+
+# This function allows the user to register a found item
+def register_found():
+    description = simpledialog.askstring("Register Found Item", "Item description:")
+    if not description:
+        return
+    location = simpledialog.askstring("Register Found Item", "Where was it found?:")
+    if not location:
+        return
+    current_date = get_current_datetime()
+    date = simpledialog.askstring("Register Found Item", "Date:", initialvalue=current_date or "")
+    if not date:
+        return
+
+    # Load existing found items
+    df = pd.read_csv(found_file)
+
+    # Create new row
+    new_item = pd.DataFrame([[description, location, date]], columns=df.columns)
+
+    # Append and save
+    df = pd.concat([df, new_item], ignore_index=True)
+    df.to_csv(found_file, index=False)
+
+    messagebox.showinfo("Success", "Found item registered!")
+
+# This function allows the user to delete lost or found items in a combined window with tabs
+def delete_items():
+    try:
+        lost_df = pd.read_csv(lost_file)
+        found_df = pd.read_csv(found_file)
+        
+        if len(lost_df) == 0 and len(found_df) == 0:
+            messagebox.showwarning("No Items", "No items to delete.")
+            return
+        
+        # Create a new window for deleting items
+        delete_window = tk.Toplevel()
+        delete_window.title("Delete Items")
+        delete_window.geometry("800x450")
+        
+        # Create notebook (tabs)
+        notebook = ttk.Notebook(delete_window)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # TAB 1: Delete Lost Items
+        lost_frame = ttk.Frame(notebook)
+        notebook.add(lost_frame, text="Delete Lost Items")
+        
+        # Title
+        title_label = ttk.Label(lost_frame, text="Select a lost item to delete:", 
+                                font=("Arial", 12, "bold"))
+        title_label.pack(anchor='w', padx=10, pady=(10, 10))
+        
+        if len(lost_df) == 0:
+            no_items_label = ttk.Label(lost_frame, text="No lost items to delete.", 
+                                       font=("Arial", 11))
+            no_items_label.pack(anchor='w', padx=10, pady=20)
+        else:
+            # Create Treeview for lost items
+            lost_tree = ttk.Treeview(lost_frame, height=12, columns=("ID", "Description", "Location", "Date"), 
+                                     show="headings")
+            lost_tree.column("ID", width=50)
+            lost_tree.column("Description", width=300)
+            lost_tree.column("Location", width=200)
+            lost_tree.column("Date", width=150)
+            
+            lost_tree.heading("ID", text="ID")
+            lost_tree.heading("Description", text="Description")
+            lost_tree.heading("Location", text="Location")
+            lost_tree.heading("Date", text="Date")
+            
+            # Add items to tree
+            for idx, row in lost_df.iterrows():
+                lost_tree.insert("", tk.END, values=(idx, row['description'], row['location'], row['date']))
+            
+            lost_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+            
+            # Button frame for lost items
+            lost_button_frame = ttk.Frame(lost_frame)
+            lost_button_frame.pack(fill=tk.X, padx=10, pady=10)
+            
+            def delete_lost_selected():
+                selection = lost_tree.selection()
+                if not selection:
+                    messagebox.showwarning("No Selection", "Please select an item to delete.")
+                    return
+                
+                item = lost_tree.item(selection[0])
+                item_id = int(item['values'][0])
+                item_desc = item['values'][1]
+                
+                if messagebox.askyesno("Confirm Delete", f"Delete '{item_desc}'?"):
+                    df_updated = pd.read_csv(lost_file)
+                    df_updated = df_updated.drop(item_id).reset_index(drop=True)
+                    df_updated.to_csv(lost_file, index=False)
+                    messagebox.showinfo("Success", f"Deleted lost item: {item_desc}")
+                    lost_tree.delete(selection[0])
+            
+            ttk.Button(lost_button_frame, text="Delete Selected", command=delete_lost_selected).pack(side=tk.LEFT, padx=5)
+        
+        # TAB 2: Delete Found Items
+        found_frame = ttk.Frame(notebook)
+        notebook.add(found_frame, text="Delete Found Items")
+        
+        # Title
+        title_label2 = ttk.Label(found_frame, text="Select a found item to delete:", 
+                                 font=("Arial", 12, "bold"))
+        title_label2.pack(anchor='w', padx=10, pady=(10, 10))
+        
+        if len(found_df) == 0:
+            no_items_label2 = ttk.Label(found_frame, text="No found items to delete.", 
+                                        font=("Arial", 11))
+            no_items_label2.pack(anchor='w', padx=10, pady=20)
+        else:
+            # Create Treeview for found items
+            found_tree = ttk.Treeview(found_frame, height=12, columns=("ID", "Description", "Location", "Date"), 
+                                      show="headings")
+            found_tree.column("ID", width=50)
+            found_tree.column("Description", width=300)
+            found_tree.column("Location", width=200)
+            found_tree.column("Date", width=150)
+            
+            found_tree.heading("ID", text="ID")
+            found_tree.heading("Description", text="Description")
+            found_tree.heading("Location", text="Location")
+            found_tree.heading("Date", text="Date")
+            
+            # Add items to tree
+            for idx, row in found_df.iterrows():
+                found_tree.insert("", tk.END, values=(idx, row['description'], row['location'], row['date']))
+            
+            found_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+            
+            # Button frame for found items
+            found_button_frame = ttk.Frame(found_frame)
+            found_button_frame.pack(fill=tk.X, padx=10, pady=10)
+            
+            def delete_found_selected():
+                selection = found_tree.selection()
+                if not selection:
+                    messagebox.showwarning("No Selection", "Please select an item to delete.")
+                    return
+                
+                item = found_tree.item(selection[0])
+                item_id = int(item['values'][0])
+                item_desc = item['values'][1]
+                
+                if messagebox.askyesno("Confirm Delete", f"Delete '{item_desc}'?"):
+                    df_updated = pd.read_csv(found_file)
+                    df_updated = df_updated.drop(item_id).reset_index(drop=True)
+                    df_updated.to_csv(found_file, index=False)
+                    messagebox.showinfo("Success", f"Deleted found item: {item_desc}")
+                    found_tree.delete(selection[0])
+            
+            ttk.Button(found_button_frame, text="Delete Selected", command=delete_found_selected).pack(side=tk.LEFT, padx=5)
+        
+        # Close button at bottom
+        close_button_frame = ttk.Frame(delete_window)
+        close_button_frame.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Button(close_button_frame, text="Close", command=delete_window.destroy).pack(side=tk.RIGHT)
+    
+    except Exception as e:
+        messagebox.showerror("Error", f"Error deleting item: {e}")
+
+# This function displays all lost and found items in a organized table format
+def view_items():
+    lost_df = pd.read_csv(lost_file)
+    found_df = pd.read_csv(found_file)
+
+    lost_count = len(lost_df)
+    found_count = len(found_df)
+
+    # Create a new window for displaying items
+    view_window = tk.Toplevel()
+    view_window.title("View Items")
+    view_window.geometry("900x600")
+
+    # Main frame
+    main_frame = ttk.Frame(view_window)
+    main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    # Lost Items Section
+    lost_label = ttk.Label(main_frame, text=f"Lost Items ({lost_count})", font=("Arial", 12, "bold"))
+    lost_label.pack(anchor='w', pady=(0, 10))
+
+    # Create Treeview for lost items
+    lost_tree = ttk.Treeview(main_frame, height=8, columns=("Description", "Location", "Date", "Matricula"), show="headings")
+    lost_tree.column("Description", width=250)
+    lost_tree.column("Location", width=200)
+    lost_tree.column("Date", width=150)
+    lost_tree.column("Matricula", width=100)
+
+    lost_tree.heading("Description", text="Description")
+    lost_tree.heading("Location", text="Location")
+    lost_tree.heading("Date", text="Date")
+    lost_tree.heading("Matricula", text="Matricula")
+
+    # Add lost items to tree
+    for idx, row in lost_df.iterrows():
+        lost_tree.insert("", tk.END, values=(row['description'], row['location'], row['date'], row['matricula']))
+
+    lost_tree.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+
+    # Found Items Section
+    found_label = ttk.Label(main_frame, text=f"Found Items ({found_count})", font=("Arial", 12, "bold"))
+    found_label.pack(anchor='w', pady=(0, 10))
+
+    # Create Treeview for found items
+    found_tree = ttk.Treeview(main_frame, height=8, columns=("Description", "Location", "Date"), show="headings")
+    found_tree.column("Description", width=300)
+    found_tree.column("Location", width=250)
+    found_tree.column("Date", width=150)
+
+    found_tree.heading("Description", text="Description")
+    found_tree.heading("Location", text="Location")
+    found_tree.heading("Date", text="Date")
+
+    # Add found items to tree
+    for idx, row in found_df.iterrows():
+        found_tree.insert("", tk.END, values=(row['description'], row['location'], row['date']))
+
+    found_tree.pack(fill=tk.BOTH, expand=True)
+
+# This function compares descriptions of lost and found items
+# It tries to find possible matches based on similar text and displays them in a table
+def match_items():
+    lost = pd.read_csv(lost_file)
+    found = pd.read_csv(found_file)
+
+    matches = []
+    match_count = 0
+    # Compare each lost item with each found item
+    for l in lost["description"]:
+        for f in found["description"]:
+            # If one description is contained in the other (case insensitive)
+            if l.lower() in f.lower() or f.lower() in l.lower():
+                matches.append({"lost": l, "found": f})
+                match_count += 1
+
+    # Create a new window for displaying matches
+    match_window = tk.Toplevel()
+    match_window.title("Item Matches")
+    match_window.geometry("800x400")
+
+    # Main frame
+    main_frame = ttk.Frame(match_window)
+    main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    # Title with match count
+    title_label = ttk.Label(main_frame, text=f"Possible Matches Found: {match_count}", 
+                            font=("Arial", 14, "bold"))
+    title_label.pack(anchor='w', pady=(0, 15))
+
+    if match_count == 0:
+        no_matches_label = ttk.Label(main_frame, text="No matches found.", 
+                                     font=("Arial", 11))
+        no_matches_label.pack(anchor='w', pady=20)
+    else:
+        # Create Treeview for matches
+        match_tree = ttk.Treeview(main_frame, height=15, columns=("Lost Item", "Found Item"), 
+                                  show="headings")
+        match_tree.column("Lost Item", width=350)
+        match_tree.column("Found Item", width=350)
+
+        match_tree.heading("Lost Item", text="Lost Item")
+        match_tree.heading("Found Item", text="Found Item")
+
+        # Add matches to tree
+        for idx, match in enumerate(matches):
+            match_tree.insert("", tk.END, values=(match["lost"], match["found"]))
+
+        match_tree.pack(fill=tk.BOTH, expand=True)
+
+# GUI setup
+def main():
+    initialize_files()
+
+    root = tk.Tk()
+    root.title("Lost & Found Tracker")
+    root.geometry("400x450")
+    root.configure(bg='#f0f0f0')
+
+    # Set modern theme
+    style = ttk.Style()
+    style.theme_use('clam')
+
+    # Configure styles
+    style.configure('TLabel', font=('Arial', 16, 'bold'), background='#f0f0f0', foreground='#333')
+    style.configure('TButton', font=('Arial', 12), padding=10, relief='flat', background='#4CAF50', foreground='white')
+    style.map('TButton', background=[('active', '#45a049')])
+
+    # Title
+    title_label = ttk.Label(root, text="Lost & Found Tracker")
+    title_label.pack(pady=20)
+
+    # Buttons
+    button_frame = ttk.Frame(root)
+    button_frame.pack(pady=10)
+
+    ttk.Button(button_frame, text="Register Lost Item", command=register_lost).pack(fill='x', pady=5)
+    ttk.Button(button_frame, text="Register Found Item", command=register_found).pack(fill='x', pady=5)
+    ttk.Button(button_frame, text="View Items", command=view_items).pack(fill='x', pady=5)
+    ttk.Button(button_frame, text="Match Items", command=match_items).pack(fill='x', pady=5)
+    ttk.Button(button_frame, text="Delete Items", command=delete_items).pack(fill='x', pady=5)
+    ttk.Button(button_frame, text="Exit", command=root.quit, style='Exit.TButton').pack(fill='x', pady=5)
+
+    # Configure exit button differently
+    style.configure('Exit.TButton', background='#f44336')
+    style.map('Exit.TButton', background=[('active', '#d32f2f')])
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    initialize_files()
+    # Start Flask API in a separate thread
+    api_thread = Thread(target=lambda: app.run(debug=True, use_reloader=False, port=5000))
+    api_thread.daemon = True
+    api_thread.start()
+    # Start GUI
+    main()
